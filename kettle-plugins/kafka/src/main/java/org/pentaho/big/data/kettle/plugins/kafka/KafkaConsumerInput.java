@@ -22,6 +22,7 @@
 package org.pentaho.big.data.kettle.plugins.kafka;
 
 import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener;
 import org.pentaho.di.core.Result;
 import org.pentaho.di.core.exception.KettleStepException;
 import org.pentaho.di.i18n.BaseMessages;
@@ -37,6 +38,7 @@ import org.pentaho.di.trans.streaming.common.FixedTimeStreamWindow;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -79,9 +81,15 @@ public class KafkaConsumerInput extends BaseStreamStep implements StepInterface 
         kafkaConsumerInputMeta.getKeyField().getOutputType(),
         kafkaConsumerInputMeta.getMessageField().getOutputType() );
 
-    Set<String> topics =
-      kafkaConsumerInputMeta.getTopics().stream().map( this::environmentSubstitute ).collect( Collectors.toSet() );
-    consumer.subscribe( topics );
+    if ( KafkaConsumerInputMeta.TopicType.PATTERN.equals( kafkaConsumerInputMeta.getTopicType() ) ) {
+      String topic = environmentSubstitute( kafkaConsumerInputMeta.getPatternTopic() );
+      Pattern pattern = Pattern.compile( topic );
+      consumer.subscribe( pattern, new NoOpConsumerRebalanceListener() );
+    } else {
+      Set<String> topics =
+              kafkaConsumerInputMeta.getTopics().stream().map(this::environmentSubstitute).collect(Collectors.toSet());
+      consumer.subscribe(topics);
+    }
 
     source = new KafkaStreamSource( consumer, kafkaConsumerInputMeta, kafkaConsumerInputData, variables, this );
     window = new FixedTimeStreamWindow<>( getSubtransExecutor(), kafkaConsumerInputData.outputRowMeta, getDuration(),

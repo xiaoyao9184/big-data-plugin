@@ -85,6 +85,9 @@ import static org.pentaho.big.data.kettle.plugins.kafka.KafkaConsumerInputMeta.C
 import static org.pentaho.big.data.kettle.plugins.kafka.KafkaConsumerInputMeta.DIRECT_BOOTSTRAP_SERVERS;
 import static org.pentaho.big.data.kettle.plugins.kafka.KafkaConsumerInputMeta.TOPIC;
 import static org.pentaho.big.data.kettle.plugins.kafka.KafkaConsumerInputMeta.TRANSFORMATION_PATH;
+import static org.pentaho.big.data.kettle.plugins.kafka.KafkaConsumerInputMeta.TopicType.PATTERN;
+import static org.pentaho.big.data.kettle.plugins.kafka.KafkaConsumerInputMeta.TopicType.STATIC;
+import static org.pentaho.big.data.kettle.plugins.kafka.KafkaConsumerInputMeta.TOPIC_TYPE;
 import static org.pentaho.di.trans.streaming.common.BaseStreamStepMeta.PARALLELISM;
 import static org.pentaho.di.trans.streaming.common.BaseStreamStepMeta.SUB_STEP;
 
@@ -179,6 +182,7 @@ public class KafkaConsumerInputMetaTest {
         + "    <clusterName>some_cluster</clusterName>\n"
         + "    <directBootstrapServers>some_host:123,some_other_host:456</directBootstrapServers>\n"
         + "    <connectionType>CLUSTER</connectionType>\n"
+        + "    <topicType>STATIC</topicType>\n"
         + "    <topic>one</topic>\n"
         + "    <consumerGroup>two</consumerGroup>\n"
         + "    <transformationPath>/home/pentaho/myKafkaTransformation.ktr</transformationPath>\n"
@@ -211,6 +215,7 @@ public class KafkaConsumerInputMetaTest {
     Node node = XMLHandler.loadXMLString( inputXml ).getFirstChild();
     meta.loadXML( node, Collections.emptyList(), metastore );
     assertEquals( "some_cluster", meta.getClusterName() );
+    assertEquals( STATIC, meta.getTopicType() );
     assertEquals( "one", meta.getTopics().get( 0 ) );
     assertEquals( "two", meta.getConsumerGroup() );
     assertEquals( "/home/pentaho/myKafkaTransformation.ktr", meta.getTransformationPath() );
@@ -296,6 +301,8 @@ public class KafkaConsumerInputMetaTest {
 
     assertEquals(
       "    <clusterName>some_cluster</clusterName>" + Const.CR
+        + "    <topicType>STATIC</topicType>" + Const.CR
+        + "    <patternTopic/>" + Const.CR
         + "    <topic>temperature</topic>" + Const.CR
         + "    <consumerGroup>alert</consumerGroup>" + Const.CR
         + "    <transformationPath>/home/pentaho/myKafkaTransformation.ktr</transformationPath>" + Const.CR
@@ -327,6 +334,7 @@ public class KafkaConsumerInputMetaTest {
     KafkaConsumerInputMeta meta = new KafkaConsumerInputMeta();
     StringObjectId stepId = new StringObjectId( "stepId" );
     when( rep.getStepAttributeString( stepId, CLUSTER_NAME ) ).thenReturn( "some_cluster" );
+    when( rep.getStepAttributeString( stepId, TOPIC_TYPE ) ).thenReturn( "STATIC" );
     when( rep.getStepAttributeString( stepId, 0, TOPIC ) ).thenReturn( "readings" );
     when( rep.countNrStepAttributes( stepId, TOPIC ) ).thenReturn( 1 );
     when( rep.getStepAttributeString( stepId, CONSUMER_GROUP ) ).thenReturn( "hooligans" );
@@ -368,6 +376,7 @@ public class KafkaConsumerInputMetaTest {
 
     meta.readRep( rep, metastore, stepId, Collections.emptyList() );
     assertEquals( "some_cluster", meta.getClusterName() );
+    assertEquals( STATIC, meta.getTopicType() );
     assertEquals( "readings", meta.getTopics().get( 0 ) );
     assertEquals( "hooligans", meta.getConsumerGroup() );
     assertEquals( "/home/pentaho/atrans.ktr", meta.getTransformationPath() );
@@ -415,6 +424,7 @@ public class KafkaConsumerInputMetaTest {
     StringObjectId stepId = new StringObjectId( "step1" );
     StringObjectId transId = new StringObjectId( "trans1" );
     meta.setClusterName( "some_cluster" );
+    meta.setTopicType(STATIC);
     ArrayList<String> topicList = new ArrayList<>();
     topicList.add( "temperature" );
     meta.setTopics( topicList );
@@ -437,6 +447,7 @@ public class KafkaConsumerInputMetaTest {
 
     meta.saveRep( rep, metastore, transId, stepId );
     verify( rep ).saveStepAttribute( transId, stepId, CLUSTER_NAME, "some_cluster" );
+    verify( rep ).saveStepAttribute( transId, stepId, TOPIC_TYPE, "STATIC" );
     verify( rep ).saveStepAttribute( transId, stepId, 0, TOPIC, "temperature" );
     verify( rep ).saveStepAttribute( transId, stepId, CONSUMER_GROUP, "alert" );
     verify( rep ).saveStepAttribute( transId, stepId, TRANSFORMATION_PATH, "/home/Pentaho/btrans.ktr" );
@@ -479,6 +490,15 @@ public class KafkaConsumerInputMetaTest {
     verify( rep ).saveStepAttribute( transId, stepId, 0, ADVANCED_CONFIG + "_VALUE", "advancedPropertyValue1" );
     verify( rep ).saveStepAttribute( transId, stepId, 1, ADVANCED_CONFIG + "_NAME", "advanced.property2" );
     verify( rep ).saveStepAttribute( transId, stepId, 1, ADVANCED_CONFIG + "_VALUE", "advancedPropertyValue2" );
+  }
+
+  @Test
+  public void testReadsPatternTopic() {
+    KafkaConsumerInputMeta meta = new KafkaConsumerInputMeta();
+    meta.setTopicType( PATTERN );
+    meta.setPatternTopic( "one.*" );
+    assertEquals( PATTERN, meta.getTopicType() );
+    assertEquals( "one.*", meta.getPatternTopic() );
   }
 
   @Test
@@ -556,6 +576,11 @@ public class KafkaConsumerInputMetaTest {
   @Test
   public void testDirecIsDefault() {
     assertEquals( DIRECT, new KafkaConsumerInputMeta().getConnectionType() );
+  }
+
+  @Test
+  public void testStaticIsDefault() {
+    assertEquals( STATIC, new KafkaConsumerInputMeta().getTopicType() );
   }
 
   @Test

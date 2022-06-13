@@ -24,6 +24,7 @@ package org.pentaho.big.data.kettle.plugins.kafka;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import org.apache.commons.lang.StringUtils;
 import org.pentaho.hadoop.shim.api.cluster.NamedCluster;
 import org.pentaho.hadoop.shim.api.cluster.NamedClusterService;
 import org.pentaho.hadoop.shim.api.cluster.NamedClusterServiceLocator;
@@ -71,6 +72,7 @@ import java.util.stream.IntStream;
 
 import static com.google.common.base.Strings.isNullOrEmpty;
 import static org.pentaho.big.data.kettle.plugins.kafka.KafkaConsumerInputMeta.ConnectionType.DIRECT;
+import static org.pentaho.big.data.kettle.plugins.kafka.KafkaConsumerInputMeta.TopicType.STATIC;
 import static org.pentaho.big.data.kettle.plugins.kafka.KafkaLineageConstants.KAFKA_SERVER_METAVERSE;
 import static org.pentaho.big.data.kettle.plugins.kafka.KafkaLineageConstants.KAFKA_TOPIC_METAVERSE;
 import static org.pentaho.big.data.kettle.plugins.kafka.KafkaLineageConstants.KEY_FIELD_NAME;
@@ -105,8 +107,15 @@ public class KafkaConsumerInputMeta extends BaseStreamStepMeta implements StepMe
     CLUSTER
   }
 
+  public enum TopicType {
+    STATIC,
+    PATTERN
+  }
+
   public static final String CLUSTER_NAME = "clusterName";
+  public static final String TOPIC_TYPE = "topicType";
   public static final String TOPIC = "topic";
+  public static final String PATTERN_TOPIC = "patternTopic";
   public static final String CONSUMER_GROUP = "consumerGroup";
   public static final String TRANSFORMATION_PATH = "transformationPath";
   public static final String BATCH_SIZE = "batchSize";
@@ -138,8 +147,14 @@ public class KafkaConsumerInputMeta extends BaseStreamStepMeta implements StepMe
   @Injection( name = "CLUSTER_NAME" )
   private String clusterName;
 
+  @Injection( name = "TOPIC_TYPE" )
+  private TopicType topicType = STATIC;
+
   @Injection( name = "TOPICS" )
   private List<String> topics = new ArrayList<>();
+
+  @Injection( name = "PATTERN_TOPIC" )
+  private String patternTopic;
 
   @Injection( name = "CONSUMER_GROUP" )
   private String consumerGroup;
@@ -222,6 +237,10 @@ public class KafkaConsumerInputMeta extends BaseStreamStepMeta implements StepMe
   private void readData( Node stepnode ) {
     setClusterName( XMLHandler.getTagValue( stepnode, CLUSTER_NAME ) );
 
+    String tt = XMLHandler.getTagValue( stepnode, TOPIC_TYPE );
+    setTopicType( StringUtils.isEmpty(tt) ? STATIC : TopicType.valueOf( tt ) );
+    setPatternTopic( XMLHandler.getTagValue( stepnode, PATTERN_TOPIC ) );
+
     List<Node> topicsNode = XMLHandler.getNodes( stepnode, TOPIC );
     topicsNode.forEach( node -> {
       String displayName = XMLHandler.getNodeValue( node );
@@ -289,6 +308,9 @@ public class KafkaConsumerInputMeta extends BaseStreamStepMeta implements StepMe
     throws KettleException {
     setClusterName( rep.getStepAttributeString( objectId, CLUSTER_NAME ) );
 
+    setTopicType( TopicType.valueOf( rep.getStepAttributeString( objectId, TOPIC_TYPE ) ) );
+    setPatternTopic( rep.getStepAttributeString( objectId, PATTERN_TOPIC  ) );
+
     int topicCount = rep.countNrStepAttributes( objectId, TOPIC );
     for ( int i = 0; i < topicCount; i++ ) {
       addTopic( rep.getStepAttributeString( objectId, i, TOPIC ) );
@@ -328,6 +350,9 @@ public class KafkaConsumerInputMeta extends BaseStreamStepMeta implements StepMe
   @Override public void saveRep( Repository rep, IMetaStore metaStore, ObjectId transId, ObjectId stepId )
     throws KettleException {
     rep.saveStepAttribute( transId, stepId, CLUSTER_NAME, clusterName );
+
+    rep.saveStepAttribute( transId, stepId, TOPIC_TYPE, topicType.name() );
+    rep.saveStepAttribute( transId, stepId, PATTERN_TOPIC, patternTopic );
 
     int i = 0;
     for ( String topic : topics ) {
@@ -410,6 +435,10 @@ public class KafkaConsumerInputMeta extends BaseStreamStepMeta implements StepMe
     this.topics.add( topic );
   }
 
+  public void setPatternTopic( String patternTopic ) {
+    this.patternTopic = patternTopic;
+  }
+
   public void setConsumerGroup( String consumerGroup ) {
     this.consumerGroup = consumerGroup;
   }
@@ -429,6 +458,10 @@ public class KafkaConsumerInputMeta extends BaseStreamStepMeta implements StepMe
   @Metaverse.Property ( name = TOPIC, parentNodeName = KAFKA_TOPIC_METAVERSE )
   public List<String> getTopics() {
     return topics;
+  }
+
+  public String getPatternTopic() {
+    return patternTopic;
   }
 
   public String getConsumerGroup() {
@@ -499,10 +532,21 @@ public class KafkaConsumerInputMeta extends BaseStreamStepMeta implements StepMe
     this.connectionType = connectionType;
   }
 
+  public TopicType getTopicType() {
+    return topicType;
+  }
+
+  public void setTopicType( final TopicType topicType ) {
+    this.topicType = topicType;
+  }
+
   @Override public String getXML() {
     StringBuilder retval = new StringBuilder();
     retval.append( "    " ).append( XMLHandler.addTagValue( CLUSTER_NAME, clusterName ) );
     parentStepMeta.getParentTransMeta().getNamedClusterEmbedManager().registerUrl( "hc://" + clusterName );
+
+    retval.append( "    " ).append( XMLHandler.addTagValue( TOPIC_TYPE, topicType.name() ) );
+    retval.append( "    " ).append( XMLHandler.addTagValue( PATTERN_TOPIC, patternTopic ) );
 
     getTopics().forEach( topic ->
       retval.append( "    " ).append( XMLHandler.addTagValue( TOPIC, topic ) ) );
