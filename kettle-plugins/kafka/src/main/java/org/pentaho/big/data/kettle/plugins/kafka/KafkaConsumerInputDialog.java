@@ -63,6 +63,8 @@ import java.util.Map;
 import static java.util.Arrays.stream;
 import static org.pentaho.big.data.kettle.plugins.kafka.KafkaConsumerInputMeta.ConnectionType.CLUSTER;
 import static org.pentaho.big.data.kettle.plugins.kafka.KafkaConsumerInputMeta.ConnectionType.DIRECT;
+import static org.pentaho.big.data.kettle.plugins.kafka.KafkaConsumerInputMeta.TopicType.PATTERN;
+import static org.pentaho.big.data.kettle.plugins.kafka.KafkaConsumerInputMeta.TopicType.STATIC;
 
 @SuppressWarnings ( { "FieldCanBeLocal", "unused" } )
 @PluginDialog ( id = "KafkaConsumerInput", pluginType = PluginDialog.PluginType.STEP, image = "KafkaConsumerInput.svg" )
@@ -86,10 +88,12 @@ public class KafkaConsumerInputDialog extends BaseStreamingDialog implements Ste
 
 
   private TextVar wConsumerGroup;
+  private TextVar wPatternTopic;
   private TableView topicsTable;
   private TableView optionsTable;
 
-
+  private Button wbStatic;
+  private Button wbPattern;
   private Button wbDirect;
   private Button wbCluster;
   private Label wlBootstrapServers;
@@ -249,14 +253,76 @@ public class KafkaConsumerInputDialog extends BaseStreamingDialog implements Ste
     fdBootstrapServers.right = new FormAttachment( 78, 0 );
     wBootstrapServers.setLayoutData( fdBootstrapServers );
 
-    Label wlTopic = new Label( wSetupComp, SWT.LEFT );
-    props.setLook( wlTopic );
-    wlTopic.setText( BaseMessages.getString( PKG, "KafkaConsumerInputDialog.Topics" ) );
-    FormData fdlTopic = new FormData();
-    fdlTopic.left = new FormAttachment( 0, 0 );
-    fdlTopic.top = new FormAttachment( wConnectionGroup, 10 );
-    fdlTopic.right = new FormAttachment( 50, 0 );
-    wlTopic.setLayoutData( fdlTopic );
+    Group wTopicGroup = new Group( wSetupComp, SWT.SHADOW_ETCHED_IN );
+    wTopicGroup.setText( BaseMessages.getString( PKG, "KafkaConsumerInputDialog.Topic" ) );
+    FormLayout flwTopic = new FormLayout();
+    flwTopic.marginHeight = 15;
+    flwTopic.marginWidth = 15;
+    wTopicGroup.setLayout( flwTopic );
+    props.setLook( wTopicGroup );
+
+    wbStatic = new Button( wTopicGroup, SWT.RADIO );
+    wbStatic.setText( BaseMessages.getString( PKG, "KafkaConsumerInputDialog.Static" ) );
+    FormData fdbStatic = new FormData();
+    fdbStatic.left = new FormAttachment( 0, 0 );
+    fdbStatic.top = new FormAttachment( 0, 0 );
+    wbStatic.setLayoutData( fdbStatic );
+    wbStatic.addSelectionListener( new SelectionListener() {
+      @Override public void widgetSelected( final SelectionEvent selectionEvent ) {
+        lsMod.modifyText( null );
+        toggleTopicVisibility( true );
+      }
+
+      @Override public void widgetDefaultSelected( final SelectionEvent selectionEvent ) {
+        toggleTopicVisibility( true );
+      }
+    } );
+    props.setLook( wbStatic );
+
+    wbPattern = new Button( wTopicGroup, SWT.RADIO );
+    wbPattern.setText( BaseMessages.getString( PKG, "KafkaConsumerInputDialog.Pattern" ) );
+    FormData fdbPattern = new FormData();
+    fdbPattern.left = new FormAttachment( wbStatic, 10 );
+    fdbPattern.top = new FormAttachment( 0, 0 );
+    wbPattern.setLayoutData( fdbPattern );
+    wbPattern.addSelectionListener( new SelectionListener() {
+      @Override public void widgetSelected( final SelectionEvent selectionEvent ) {
+        lsMod.modifyText( null );
+        toggleTopicVisibility( false );
+      }
+
+      @Override public void widgetDefaultSelected( final SelectionEvent selectionEvent ) {
+        toggleTopicVisibility( false );
+      }
+    } );
+    props.setLook( wbPattern );
+
+    Label topicSeparator = new Label( wTopicGroup, SWT.SEPARATOR | SWT.HORIZONTAL );
+    FormData fdtopicSeparator = new FormData();
+    fdtopicSeparator.top = new FormAttachment( wbStatic, 15 );
+    fdtopicSeparator.left = new FormAttachment( 0, 0 );
+    fdtopicSeparator.right = new FormAttachment( 100, 0 );
+    topicSeparator.setLayoutData( fdtopicSeparator );
+
+//    Label wlTopic = new Label( wTopicGroup, SWT.LEFT );
+//    props.setLook( wlTopic );
+//    wlTopic.setText( BaseMessages.getString( PKG, "KafkaConsumerInputDialog.Topics" ) );
+//    FormData fdlTopic = new FormData();
+//    fdlTopic.left = new FormAttachment( topicSeparator, 15 );
+//    fdlTopic.top = new FormAttachment( 0, 10 );
+//    fdlTopic.right = new FormAttachment( 50, 0 );
+//    wlTopic.setLayoutData( fdlTopic );
+
+    wPatternTopic = new TextVar( transMeta, wTopicGroup, SWT.SINGLE | SWT.LEFT | SWT.BORDER );
+    props.setLook( wPatternTopic );
+    wPatternTopic.addModifyListener( lsMod );
+    FormData fdwPatternTopic = new FormData();
+    fdwPatternTopic.left = new FormAttachment( topicSeparator, 0, SWT.LEFT );
+    fdwPatternTopic.top = new FormAttachment( topicSeparator, 15 );
+    fdwPatternTopic.right = new FormAttachment( topicSeparator, 0, SWT.RIGHT );
+    wPatternTopic.setLayoutData( fdwPatternTopic );
+
+    buildTopicsTable( wTopicGroup, topicSeparator );
 
     wConsumerGroup = new TextVar( transMeta, wSetupComp, SWT.SINGLE | SWT.LEFT | SWT.BORDER );
     props.setLook( wConsumerGroup );
@@ -275,7 +341,14 @@ public class KafkaConsumerInputDialog extends BaseStreamingDialog implements Ste
     fdlConsumerGroup.right = new FormAttachment( 50, 0 );
     wlConsumerGroup.setLayoutData( fdlConsumerGroup );
 
-    buildTopicsTable( wSetupComp, wlTopic, wlConsumerGroup );
+    //set topic group bottom to consumer group
+    FormData fdTopicGroup = new FormData();
+    fdTopicGroup.left = new FormAttachment( 0, 0 );
+    fdTopicGroup.top = new FormAttachment( wConnectionGroup, 0 );
+    fdTopicGroup.right = new FormAttachment( 100, 0 );
+    fdTopicGroup.bottom = new FormAttachment( wlConsumerGroup, -10, SWT.TOP );
+    fdTopicGroup.width = INPUT_WIDTH;
+    wTopicGroup.setLayoutData( fdTopicGroup );
 
     FormData fdSetupComp = new FormData();
     fdSetupComp.left = new FormAttachment( 0, 0 );
@@ -292,6 +365,11 @@ public class KafkaConsumerInputDialog extends BaseStreamingDialog implements Ste
     wBootstrapServers.setVisible( isDirect );
     wlClusterName.setVisible( !isDirect );
     wClusterName.setVisible( !isDirect );
+  }
+
+  private void toggleTopicVisibility( final boolean isDirect ) {
+    topicsTable.setVisible( isDirect );
+    wPatternTopic.setVisible( !isDirect );
   }
 
   private void buildFieldsTab() {
@@ -515,7 +593,7 @@ public class KafkaConsumerInputDialog extends BaseStreamingDialog implements Ste
     }
   }
 
-  private void buildTopicsTable( Composite parentWidget, Control controlAbove, Control controlBelow ) {
+  private void buildTopicsTable( Composite parentWidget, Control controlAbove ) {
     ColumnInfo[] columns =
       new ColumnInfo[] { new ColumnInfo( BaseMessages.getString( PKG, "KafkaConsumerInputDialog.NameField" ),
         ColumnInfo.COLUMN_TYPE_CCOMBO, new String[ 1 ], false ) };
@@ -558,10 +636,10 @@ public class KafkaConsumerInputDialog extends BaseStreamingDialog implements Ste
     populateTopicsData();
 
     FormData fdData = new FormData();
-    fdData.left = new FormAttachment( 0, 0 );
-    fdData.top = new FormAttachment( controlAbove, 5 );
-    fdData.right = new FormAttachment( 0, 337 );
-    fdData.bottom = new FormAttachment( controlBelow, -10, SWT.TOP );
+    fdData.left = new FormAttachment( controlAbove, 0 , SWT.LEFT );
+    fdData.top = new FormAttachment( controlAbove, 15 );
+    fdData.right = new FormAttachment( controlAbove, 0, SWT.RIGHT );
+    fdData.bottom = new FormAttachment( 100, -10 );
 
     // resize the columns to fit the data in them
     stream( topicsTable.getTable().getColumns() ).forEach( column -> {
@@ -595,6 +673,10 @@ public class KafkaConsumerInputDialog extends BaseStreamingDialog implements Ste
       wBootstrapServers.setText( consumerMeta.getDirectBootstrapServers() );
     }
 
+    if ( consumerMeta.getPatternTopic() != null ) {
+      wPatternTopic.setText( consumerMeta.getPatternTopic() );
+    }
+
     populateTopicsData();
     if ( consumerMeta.getSubStep() != null ) {
       wSubStep.setText( consumerMeta.getSubStep() );
@@ -619,8 +701,11 @@ public class KafkaConsumerInputDialog extends BaseStreamingDialog implements Ste
 
     wbCluster.setSelection( !isDirect() );
     wbDirect.setSelection( isDirect() );
+    wbStatic.setSelection( isStatic() );
+    wbPattern.setSelection( !isStatic() );
 
     toggleVisibility( isDirect() );
+    toggleTopicVisibility( isStatic() );
 
     wbAutoCommit.setSelection( consumerMeta.isAutoCommit() );
     wbManualCommit.setSelection( !consumerMeta.isAutoCommit() );
@@ -646,6 +731,10 @@ public class KafkaConsumerInputDialog extends BaseStreamingDialog implements Ste
     return DIRECT.equals( consumerMeta.getConnectionType() );
   }
 
+  private boolean isStatic() {
+    return STATIC.equals( consumerMeta.getTopicType() );
+  }
+
   @Override protected void additionalOks( BaseStreamStepMeta meta ) {
     setTopicsFromTable();
 
@@ -653,6 +742,8 @@ public class KafkaConsumerInputDialog extends BaseStreamingDialog implements Ste
     consumerMeta.setConsumerGroup( wConsumerGroup.getText() );
     consumerMeta.setConnectionType( wbDirect.getSelection() ? DIRECT : CLUSTER );
     consumerMeta.setDirectBootstrapServers( wBootstrapServers.getText() );
+    consumerMeta.setTopicType( wbStatic.getSelection() ? STATIC : PATTERN );
+    consumerMeta.setPatternTopic( wPatternTopic.getText() );
     consumerMeta.setAutoCommit( wbAutoCommit.getSelection() );
     setFieldsFromTable();
     setOptionsFromTable();
